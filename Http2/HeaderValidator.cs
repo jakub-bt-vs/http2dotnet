@@ -37,7 +37,7 @@ namespace Http2
         /// Validates the headerfields of HTTP/2 requests
         /// </summary>
         public static HeaderValidationResult ValidateRequestHeaders(
-            IEnumerable<HeaderField> headerFields)
+            IEnumerable<HeaderField> headerFields, bool isRFC8441ExtendedConnect = false)
         {
             // Search and validate all required pseudo headers here
             int nrMethod = 0;
@@ -45,7 +45,8 @@ namespace Http2
             int nrAuthority = 0;
             int nrPath = 0;
             int nrPseudoFields = 0;
-
+            int nrProtocol = 0;
+            string method = null;
             foreach (var hf in headerFields)
             {
                 if (hf.Name == null || hf.Name.Length == 0)
@@ -61,6 +62,7 @@ namespace Http2
                 {
                     case ":method":
                         nrMethod++;
+                        method = hf.Value;
                         break;
                     case ":path":
                         nrPath++;
@@ -70,6 +72,13 @@ namespace Http2
                         break;
                     case ":scheme":
                         nrScheme++;
+                        break;
+                    case ":protocol":
+                        if (!isRFC8441ExtendedConnect)
+                        {
+                            return HeaderValidationResult.ErrorInvalidPseudoHeader;
+                        }
+                        nrProtocol++;
                         break;
                     default:
                         return HeaderValidationResult.ErrorInvalidPseudoHeader;
@@ -86,9 +95,26 @@ namespace Http2
 
             // Check if all relevant fields are set exactly one time
             // authority might be empty for asterisk requests
-            if (nrMethod != 1 || nrScheme != 1 || nrPath != 1 ||(nrAuthority > 1))
+
+            if (nrMethod != 1)
             {
                 return HeaderValidationResult.ErrorInvalidPseudoHeader;
+            }
+
+            if (!method.Equals("CONNECT"))
+            {
+                if (nrScheme != 1 || nrPath != 1 || (nrAuthority > 1)) return HeaderValidationResult.ErrorInvalidPseudoHeader;
+            }
+            else
+            {
+                if (isRFC8441ExtendedConnect && (nrScheme != 1 || nrPath != 1 || nrProtocol != 1 || (nrAuthority > 1)))
+                {
+                    return HeaderValidationResult.ErrorInvalidPseudoHeader;
+                }
+                else if (nrAuthority != 1)
+                {
+                    return HeaderValidationResult.ErrorInvalidPseudoHeader;
+                }
             }
 
             return ValidateNormalHeaders(headerFields.Skip(nrPseudoFields));

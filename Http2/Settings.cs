@@ -13,6 +13,7 @@ namespace Http2
         InitialWindowSize = 0x4,
         MaxFrameSize = 0x5,
         MaxHeaderListSize = 0x6,
+        EnableConnectProtocol = 0x8,
     }
 
     /// <summary>
@@ -54,6 +55,12 @@ namespace Http2
         /// list that the sender is prepared to accept, in octets
         /// </summary>
         public uint MaxHeaderListSize;
+
+
+        /// <summary>
+        /// Allow extended connect protocol described in https://www.rfc-editor.org/rfc/rfc8441
+        /// </summary>
+        public bool EnableConnectProtocol;
 
         /// <summary>
         /// Contains the default settings
@@ -228,6 +235,7 @@ namespace Http2
         /// <returns>An error value if the new setting value is not valid</returns>
         public Http2Error? UpdateFieldById(ushort id, uint value)
         {
+            // See https://www.rfc-editor.org/rfc/rfc7540#section-6.5.2
             switch ((SettingId)id)
             {
                 case SettingId.EnablePush:
@@ -274,6 +282,14 @@ namespace Http2
                         value <= Settings.Max.MaxHeaderListSize)
                     {
                         MaxHeaderListSize = value;
+                        return null;
+                    }
+                    break;
+                // https://www.rfc-editor.org/rfc/rfc8441#section-9.1
+                case SettingId.EnableConnectProtocol:
+                    if (value == 0 || value == 1)
+                    {
+                        EnableConnectProtocol = value == 1 ? true : false;
                         return null;
                     }
                     break;

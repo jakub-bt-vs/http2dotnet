@@ -642,6 +642,31 @@ namespace Http2
         }
 
         /// <summary>
+        /// Wait till server settings frame arrived and return settings
+        /// </summary>
+        /// <returns></returns>
+        /// <exception cref="TimeoutException">If settings were not received in expected time window</exception>
+        /// <exception cref="ArgumentException">Works only in client mode</exception>
+        public async Task<Settings> AwaitServerSettings()
+        {
+            if (IsServer)
+            {
+                throw new ArgumentException("Settings can only be awaited in client mode");
+            }
+            const int TIMEOUT_SEC = 5;
+            var waitTask = Task.Run(async () =>
+            {
+                while (!settingsReceived) await Task.Delay(25);
+            });
+
+            if (waitTask != await Task.WhenAny(waitTask, Task.Delay(TIMEOUT_SEC * 1_000)))
+            {
+                throw new TimeoutException($"Timeout of {TIMEOUT_SEC} sec while waiting for server settings");
+            }
+            return remoteSettings;
+        }
+
+        /// <summary>
         /// Sends a PING request to the remote and returns a Task.
         /// The task will be completed once the associated ping response had
         /// been received.
@@ -759,7 +784,7 @@ namespace Http2
             // Validate headers upfront.
             // They will also be validated before sending, but doing it upfront
             // will avoid having to cleanup a stream in invalid state.
-            var hvr = HeaderValidator.ValidateRequestHeaders(headers);
+            var hvr = HeaderValidator.ValidateRequestHeaders(headers, isRFC8441ExtendedConnect: remoteSettings.EnableConnectProtocol);
             if (hvr != HeaderValidationResult.Ok)
                 throw new Exception(hvr.ToString());
 
